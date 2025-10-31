@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      - redis
+    command: npm run dev  # Nodemon for JS
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./app.js
+          target: /app/app.js
+        - action: rebuild
+          path: ./package.json
+        - action: sync
+          path: ./public  # Syncs index.html + any static
+          target: /app/public
+        - action: sync
+          path: .  # Watches *entire* project root (all files/folders)
+          target: /app  # Maps to container WORKDIR
+          ignore:  # Prevent noise/heavy syncs
+            - node_modules/
+            - .git/
+            - *.log
+            - coverage/  # If you add tests  
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"

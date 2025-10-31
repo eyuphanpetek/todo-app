@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo App</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    h1 { color: #333; }
+    input[type="text"] { width: 70%; padding: 10px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    button { padding: 10px 15px; margin: 2px; border: none; border-radius: 4px; cursor: pointer; background: #007bff; color: white; }
+    button:hover { background: #0056b3; }
+    button.delete { background: #dc3545; }
+    button.delete:hover { background: #c82333; }
+    ul { list-style: none; padding: 0; }
+    li { display: flex; align-items: center; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; background: #f8f9fa; }
+    li span { flex-grow: 1; margin-right: 10px; }
+    .done { text-decoration: line-through; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <h1>Grok's Epic Todos 🚀</h1>
+  <input type="text" id="todoInput" placeholder="Add a new todo..." />
+  <button onclick="addTodo()">Add</button>
+  <ul id="todoList"></ul>
+
+  <script>
+    const API_BASE = '/api';
+
+    // Load from localStorage or API (with sync)
+    async function loadTodos() {
+      let items = JSON.parse(localStorage.getItem('todos') || '[]');
+      // Always sync with server for latest (Redis source of truth)
+      try {
+        const res = await fetch(`${API_BASE}/todos`);
+        if (res.ok) {
+          const { items: apiItems } = await res.json();
+          // Merge: Keep local if server missing (offline-ish), else update
+          items = apiItems.length > 0 ? apiItems : items;
+          localStorage.setItem('todos', JSON.stringify(items));
+        }
+      } catch (err) { console.error('API sync failed:', err); }  // Graceful offline
+      renderTodos(items);
+    }
+
+    // Render list
+    function renderTodos(items) {
+      const list = document.getElementById('todoList');
+      list.innerHTML = items.map(todo => `
+        <li class="${todo.done ? 'done' : ''}">
+          <span>${todo.text}</span>
+          <button onclick="toggleTodo(${todo.id})">Toggle</button>
+          <button onclick="updateTodo(${todo.id})">Edit</button>
+          <button class="delete" onclick="deleteTodo(${todo.id})">Delete</button>
+        </li>
+      `).join('');
+    }
+
+    // Add
+    async function addTodo() {
+      const input = document.getElementById('todoInput');
+      const text = input.value.trim();
+      if (!text) return;
+      try {
+        const res = await fetch(`${API_BASE}/todos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        if (res.ok) {
+          const newTodo = await res.json();
+          const items = JSON.parse(localStorage.getItem('todos') || '[]');
+          items.push(newTodo);
+          localStorage.setItem('todos', JSON.stringify(items));
+          renderTodos(items);
+          input.value = '';
+        }
+      } catch (err) { alert('Add failed: ' + err.message); }
+    }
+
+    // Toggle
+    async function toggleTodo(id) {
+      try {
+        await fetch(`${API_BASE}/todos/${id}/toggle`, { method: 'PATCH' });
+        const items = JSON.parse(localStorage.getItem('todos') || '[]');
+        const todo = items.find(t => t.id === id);
+        if (todo) todo.done = !todo.done;
+        localStorage.setItem('todos', JSON.stringify(items));
+        renderTodos(items);
+      } catch (err) { alert('Toggle failed: ' + err.message); }
+    }
+
+    // Update
+    async function updateTodo(id) {
+      const newText = prompt('New text:');
+      if (!newText || !newText.trim()) return;
+      try {
+        await fetch(`${API_BASE}/todos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: newText.trim() })
+        });
+        const items = JSON.parse(localStorage.getItem('todos') || '[]');
+        const todo = items.find(t => t.id === id);
+        if (todo) todo.text = newText.trim();
+        localStorage.setItem('todos', JSON.stringify(items));
+        renderTodos(items);
+      } catch (err) { alert('Update failed: ' + err.message); }
+    }
+
+    // Delete
+    async function deleteTodo(id) {
+      if (!confirm('Delete this todo?')) return;
+      try {
+        await fetch(`${API_BASE}/todos/${id}`, { method: 'DELETE' });
+        let items = JSON.parse(localStorage.getItem('todos') || '[]');
+        items = items.filter(t => t.id !== id);
+        localStorage.setItem('todos', JSON.stringify(items));
+        renderTodos(items);
+      } catch (err) { alert('Delete failed: ' + err.message); }
+    }
+
+    // Enter key support
+    document.getElementById('todoInput').addEventListener('keypress', e => {
+      if (e.key === 'Enter') addTodo();
+    });
+
+    // Initial load
+    loadTodos();
+  </script>
+</body>
+</html>

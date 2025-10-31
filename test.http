@@ -1,0 +1,35 @@
+### Welcome - Root Endpoint
+GET http://localhost:3000/api/
+
+### List All Todos
+GET http://localhost:3000/api/todos
+
+### Add a New Todo
+POST http://localhost:3000/api/todos
+Content-Type: application/json
+
+{
+  "text": "Test from VS Code REST Client! 🚀"
+}
+
+### Update a Todo (Replace ID with a real one from list, e.g., 1730123456789)
+PUT http://localhost:3000/api/todos/1761728357991
+Content-Type: application/json
+
+{
+  "text": "Updated: Now with VS Code magic!"
+}
+
+### Toggle Done Status (Replace ID)
+PATCH http://localhost:3000/api/todos/1761728357991/toggle
+
+### Delete a Todo (Replace ID)
+DELETE http://localhost:3000/api/todos/1761728357991
+
+### Bad Request Test (Empty Text)
+POST http://localhost:3000/api/todos
+Content-Type: application/json
+
+{
+  "text": ""
+}
