@@ -74,7 +74,7 @@ pipeline {  // Top-level declarative pipeline
     post {  // Post-build actions (run regardless of success/failure)
         always {  // Cleanup every time
             cleanWs()  // Removes workspace files (frees disk; re-clones next build)
-            sh 'docker system prune -f --volumes'  # Prunes unused Docker resources (omit --volumes if persisting data)
+            sh 'docker system prune -f --volumes'  // Prunes unused Docker resources (omit --volumes if persisting data)
         }
         success {  // On green build
             echo '🚀 Pipeline nailed! App deployed—check http://localhost:3000'
