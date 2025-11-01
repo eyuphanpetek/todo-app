@@ -1,25 +1,27 @@
-pipeline {  // Top-level: Defines a declarative pipeline (vs. scripted—easier syntax)
-    agent any  // Run on any agent (your Jenkins container; scales to cloud later)
+pipeline {  // Top-level declarative pipeline
 
-    environment {  // Global vars—available in all stages (e.g., for Docker tags)
-        DOCKER_HUB_REPO = 'mrzinister/todo-app'  // Swap with your Hub username/repo
-        DOCKER_TAG = "${BUILD_NUMBER}"  // Unique tag (e.g., :1, :2)—avoids overwriting 'latest'
-        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'  // Matches Jenkins creds ID (add in Step 3 if pushing)
+    agent any  // Runs on any available agent (your Jenkins container)
+
+    environment {  // Global environment variables for reuse across stages
+        DOCKER_HUB_REPO = 'mrzinister/todo-app'  // Your Docker Hub repo (swap if needed)
+        DOCKER_TAG = "${BUILD_NUMBER}"  // Auto-tags with build number (e.g., :1, :2)
+        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'  // Jenkins credential ID for Hub push (add via Manage Credentials)
     }
 
-    stages {  // Sequence of phases—runs top-to-bottom; fails fast on error
-        stage('Checkout') {  // Pulls your Git code to Jenkins workspace
+    stages {  // Main workflow stages—execute sequentially
+        stage('Checkout') {  // Clones your Git repo to the workspace
             steps {
-                git branch: 'main',  // Branch to clone
-                    url: 'https://github.com/eyuphanpetek/todo-app.git',  // Your repo URL (swap)
-                    //credentialsId: 'github-creds'  // Optional: If private repo (add creds in Jenkins)
+                // Single-line git map to avoid multi-line parsing issues
+                git branch: 'main', url: 'https://github.com/eyuphanpetek/todo-app.git'  // Your repo URL
+                // credentialsId: 'github-creds'  // Uncomment/add if private (set in Jenkins job config)
             }
         }
-        stage('Install Dependencies & Test') {  // Validates code (add real tests later)
+
+        stage('Install Dependencies & Test') {  // Validates code and runs basic tests
             steps {
-                sh 'npm ci --only=production'  // Clean install (faster than install; prod deps only)
+                sh 'npm ci --only=production'  // Deterministic install from package-lock.json (prod deps only)
                 sh '''
-                    # Basic smoke test: Ping Redis + API health
+                    # Basic smoke test: Verify Redis connects (expand to full Jest/Mocha later)
                     node -e "
                         const redis = require('redis');
                         const client = redis.createClient({ socket: { host: 'localhost', port: 6379 } });
@@ -31,55 +33,57 @@ pipeline {  // Top-level: Defines a declarative pipeline (vs. scripted—easier 
                             process.exit(1);
                         });
                     "
-                    echo 'API smoke test: curl /api/todos (if app running)'
-                '''  // Multi-line shell—could expand to full Mocha/Jest suite
-            }
-        }
-        stage('Build Docker Image') {  // Creates your app image
-            steps {
-                script {  // Groovy script block—for Docker DSL
-                    def image = docker.build("${DOCKER_HUB_REPO}:${DOCKER_TAG}")  // Builds from your Dockerfile
-                    // Push to Hub (optional—skip if local-only)
-                    docker.withRegistry('https://index.docker.io/v1/', DOCKER_CREDENTIALS_ID) {
-                        image.push("${DOCKER_TAG}")
-                        image.push('latest')  // Overwrites 'latest' tag
-                    }
-                    echo "Built & pushed ${DOCKER_HUB_REPO}:${DOCKER_TAG}"
-                }
-            }
-        }
-        stage('Deploy to Compose') {  // Automates local run + verify
-            steps {
-                sh '''
-                    cd $WORKSPACE  # Jenkins workspace has your cloned code
-                    docker compose down --remove-orphans --volumes  # Clean old (nukes Redis data—add --volumes=false to persist)
-                    docker compose up -d --build --scale app=2  # Deploy detached, rebuild, scale to 2 replicas for fun
-                    sleep 15  # Wait for startup (tune if Redis slow)
-                    # Health checks—fail pipeline if any flop
-                    curl -f http://localhost:3000/ || exit 1  # Frontend loads
-                    curl -f http://localhost:3000/api/todos || exit 1  # API responds
-                    curl -f -X POST http://localhost:3000/api/todos -H "Content-Type: application/json" -d '{"text": "Jenkins deploy test"}' || exit 1  # POST works
-                    echo "Deploy successful—app live with test todo!"
+                    echo 'API smoke test passed (add curl if app pre-started)'
                 '''
             }
         }
-    }
 
-    post {  // Runs after stages (always/success/failure)—cleanup + notify
-        always {
-            cleanWs()  // Wipes workspace (frees space; re-clones next build)
-            sh 'docker system prune -f --volumes'  # Nukes dangling images/volumes (safe, but --volumes wipes Redis—omit if persisting)
+        stage('Build Docker Image') {  // Builds and optionally pushes your app image
+            steps {
+                script {  // Embed Groovy/Docker DSL here
+                    def image = docker.build("${env.DOCKER_HUB_REPO}:${env.DOCKER_TAG}")  // Builds from Dockerfile
+                    // Push to Docker Hub (comment out block if local-only testing)
+                    docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_CREDENTIALS_ID) {
+                        image.push("${env.DOCKER_TAG}")
+                        image.push('latest')  // Updates 'latest' tag for convenience
+                    }
+                    echo "Built and pushed image: ${env.DOCKER_HUB_REPO}:${env.DOCKER_TAG}"
+                }
+            }
         }
-        success {
-            echo '🚀 Pipeline nailed! Check http://localhost:3000 for your deployed app'
-            // Optional: Slack/Email—add plugin + emailext config
+
+        stage('Deploy to Compose') {  // Deploys to local Docker Compose and verifies
+            steps {
+                sh '''
+                    cd $WORKSPACE  # Navigate to cloned repo in Jenkins workspace
+                    docker compose down --remove-orphans --volumes  # Clean shutdown (comment --volumes to persist Redis data)
+                    docker compose up -d --build --scale app=2  # Detached build/deploy; scale app to 2 instances
+                    sleep 15  # Grace period for startup (adjust if Redis lags)
+                    # End-to-end health checks—pipeline fails on non-200
+                    curl -f http://localhost:3000/ || exit 1  # Frontend serves
+                    curl -f http://localhost:3000/api/todos || exit 1  # API endpoint responds
+                    curl -f -X POST http://localhost:3000/api/todos \\
+                         -H "Content-Type: application/json" \\
+                         -d '{"text": "Jenkins deploy test"}' || exit 1  # POST creates todo (escapes for shell)
+                    echo "Deploy successful—app live at localhost:3000 with test todo!"
+                '''
+            }
         }
-        failure {
-            echo '💥 Pipeline failed—review stages above for deets'
-            // emailext to: 'your.email@example.com', subject: "Build #${BUILD_NUMBER} Failed", body: "Logs: ${BUILD_URL}"
+    }  // End of stages
+
+    post {  // Post-build actions (run regardless of success/failure)
+        always {  // Cleanup every time
+            cleanWs()  // Removes workspace files (frees disk; re-clones next build)
+            sh 'docker system prune -f --volumes'  # Prunes unused Docker resources (omit --volumes if persisting data)
         }
-        unstable {
-            echo '⚠️ Pipeline unstable (e.g., warnings)—investigate'
+        success {  // On green build
+            echo '🚀 Pipeline nailed! App deployed—check http://localhost:3000'
         }
-    }
-}
+        failure {  // On red build
+            echo '💥 Pipeline failed—review console logs for failing stage'
+        }
+        unstable {  // On yellow (warnings, e.g., flaky tests)
+            echo '⚠️ Pipeline unstable—investigate warnings'
+        }
+    }  // End of post
+}  // End of pipeline
