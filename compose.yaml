@@ -22,7 +22,7 @@ services:
           ignore:  # Prevent noise/heavy syncs
             - node_modules/
             - .git/
-            - *.log
+            - '*.log'
             - coverage/  # If you add tests  
   redis:
     image: redis:alpine
