@@ -18,19 +18,18 @@ pipeline {  // Top-level declarative pipeline
 
         stage('Install Dependencies & Test') {  // Validates code and runs tests
             steps {
-                // FIXED: Debian-safe Node install (no software-properties-common; apt-transport-https added if needed)
+                // FIXED: NVM-based Node install (no apt repo/GPG issues—direct curl)
                 sh '''
                     if ! command -v node > /dev/null; then
-                        echo "Installing Node.js 20 as root..."
-                        apt-get update
-                        apt-get install -y curl gnupg lsb-release ca-certificates apt-transport-https
-                        mkdir -p /etc/apt/keyrings
-                        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-                        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x bookworm main" | tee /etc/apt/sources.list.d/nodesource.list
-                        apt-get update
-                        apt-get install -y nodejs
+                        echo "Installing Node.js 20 via NVM as root..."
+                        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+                        export NVM_DIR="$HOME/.nvm"
+                        [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh"  # Load NVM
+                        nvm install 20
+                        nvm use 20
                     fi
                     node --version  # Verify
+                    npm --version  # Verify npm
                 '''
                 sh 'npm ci --only=production'  // Deterministic install
                 sh '''
@@ -85,7 +84,7 @@ pipeline {  // Top-level declarative pipeline
     post {
         always {
             cleanWs()
-            sh 'docker system prune -f --volumes'  // Safe now (CLI + socket)
+            sh 'docker system prune -f --volumes'  // CLI + socket operational
         }
         success {
             echo '🚀 Pipeline nailed! App at http://localhost:3000'
