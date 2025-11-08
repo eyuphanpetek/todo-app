@@ -18,13 +18,19 @@ pipeline {  // Top-level declarative pipeline
 
         stage('Install Dependencies & Test') {  // Validates code and runs tests
             steps {
-                // NEW: Install Node.js (one-time; matches your app version)
+                // FIXED: Node install as root (no sudo—manual repo setup)
                 sh '''
                     if ! command -v node > /dev/null; then
-                        echo "Installing Node.js 20..."
-                        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                        sudo apt-get install -y nodejs
+                        echo "Installing Node.js 20 as root..."
+                        apt-get update
+                        apt-get install -y curl gnupg lsb-release ca-certificates
+                        mkdir -p /etc/apt/keyrings
+                        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+                        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/nodesource.list
+                        apt-get update
+                        apt-get install -y nodejs
                     fi
+                    node --version  # Verify
                 '''
                 sh 'npm ci --only=production'  // Deterministic install
                 sh '''
@@ -64,7 +70,7 @@ pipeline {  // Top-level declarative pipeline
                     cd $WORKSPACE
                     docker compose down --remove-orphans --volumes
                     docker compose up -d --build --scale app=2
-                    sleep 20  # Bumped for scale=2 startup
+                    sleep 20
                     curl -f http://localhost:3000/ || exit 1
                     curl -f http://localhost:3000/api/todos || exit 1
                     curl -f -X POST http://localhost:3000/api/todos \\
@@ -79,7 +85,7 @@ pipeline {  // Top-level declarative pipeline
     post {
         always {
             cleanWs()
-            // sh 'docker system prune -f --volumes'  // Commented until socket mount; uncomment after
+            sh 'docker system prune -f --volumes'  // Uncommented—CLI + socket ready
         }
         success {
             echo '🚀 Pipeline nailed! App at http://localhost:3000'
