@@ -18,15 +18,15 @@ pipeline {  // Top-level declarative pipeline
 
         stage('Install Dependencies & Test') {  // Validates code and runs tests
             steps {
-                // FIXED: Node install as root (no sudo—manual repo setup)
+                // FIXED: Node install as root, hardcoded 'bookworm' for NodeSource repo (trixie 404 bypass)
                 sh '''
                     if ! command -v node > /dev/null; then
                         echo "Installing Node.js 20 as root..."
                         apt-get update
-                        apt-get install -y curl gnupg lsb-release ca-certificates
+                        apt-get install -y curl gnupg lsb-release ca-certificates software-properties-common
                         mkdir -p /etc/apt/keyrings
                         curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-                        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/nodesource.list
+                        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x bookworm main" | tee /etc/apt/sources.list.d/nodesource.list
                         apt-get update
                         apt-get install -y nodejs
                     fi
@@ -85,7 +85,7 @@ pipeline {  // Top-level declarative pipeline
     post {
         always {
             cleanWs()
-            sh 'docker system prune -f --volumes'  // Uncommented—CLI + socket ready
+            // sh 'docker system prune -f --volumes'  // Uncomment after Docker CLI install confirmed
         }
         success {
             echo '🚀 Pipeline nailed! App at http://localhost:3000'
