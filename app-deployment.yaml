@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-app
+  labels:
+    app: todo-app
+spec:
+  replicas: 2  # Scales to 2 pods (like compose --scale app=2)
+  selector:
+    matchLabels:
+      app: todo-app
+  template:
+    metadata:
+      labels:
+        app: todo-app
+    spec:
+      containers:
+      - name: todo-app
+        image: todo-app:latest  # Your local image
+        imagePullPolicy: Never  # Don't pull from registry—use local
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"  # Points to Redis service
+        - name: NODE_ENV
+          value: "production"  # Optional: Sets env for app.js

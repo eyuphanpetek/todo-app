@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: logging
+data:
+  logstash.yml: |
+    input {
+      beats {
+        port => 5044
+      }
+    }
+    output {
+      elasticsearch {
+        hosts => ["elasticsearch.logging.svc.cluster.local:9200"]
+        manage_template => false
+        index => "todo-logs-%{+YYYY.MM.dd}"
+      }
+    }
