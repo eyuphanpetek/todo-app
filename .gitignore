@@ -1,0 +1,9 @@
+# Binaries/Executables exceeding file size limit
+kubectl
+minikube-linux-amd64
+
+# Other common build/binary directories to ignore
+.DS_Store
+node_modules/
+dist/
+.env
